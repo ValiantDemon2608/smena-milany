@@ -810,7 +810,7 @@ function save() { S.at = Date.now(); try { S.sum = summary(); } catch (e) {} try
 /* ================= Облако: вход по имени и PIN =================
    Прогресс хранится в базе Supabase. Сайт вызывает только две функции
    (game_login, game_save), обе проверяют PIN. Ключ ниже публичный. */
-const SUPA = { url: "https://wipylxfzoowrekjerqpt.supabase.co", key: "__SUPA_KEY__" };
+const SUPA = { url: "https://wipylxfzoowrekjerqpt.supabase.co", key: "sb_publishable_GqmXPOGDXG-aSD-z_GSUrQ_SvjQwxg_" };
 const CLOUD = /^https:/.test(SUPA.url) && SUPA.key.length > 20;
 const SYNC = { cred: null, busy: false, dirty: false, t: 0, state: "local" };
 try { SYNC.cred = JSON.parse(localStorage.getItem("ms-cred") || "null"); } catch (e) {}
@@ -829,7 +829,7 @@ function mergeState(a, b) {
 async function rpc(fn, body) {
   const r = await fetch(SUPA.url.replace(/\/$/, "") + "/rest/v1/rpc/" + fn, {
     method: "POST",
-    headers: { apikey: SUPA.key, Authorization: "Bearer " + SUPA.key, "Content-Type": "application/json" },
+    headers: Object.assign({ apikey: SUPA.key, "Content-Type": "application/json" }, /^eyJ/.test(SUPA.key) ? { Authorization: "Bearer " + SUPA.key } : {}),
     body: JSON.stringify(body),
   });
   const txt = await r.text(); let j = null; try { j = JSON.parse(txt); } catch (e) {}

@@ -118,7 +118,7 @@ button.ghost { background: none; border: 1px solid var(--line); color: var(--mut
 </main>
 <script>
 // Тот же адрес и публичный ключ, что в index.html
-const SUPA = { url: "https://wipylxfzoowrekjerqpt.supabase.co", key: "__SUPA_KEY__" };
+const SUPA = { url: "https://wipylxfzoowrekjerqpt.supabase.co", key: "sb_publishable_GqmXPOGDXG-aSD-z_GSUrQ_SvjQwxg_" };
 const $ = id => document.getElementById(id);
 const plural = (n, a, b, c) => { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? a : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? b : c; };
 const dayKey = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
@@ -134,7 +134,7 @@ try { const c = JSON.parse(localStorage.getItem("ms-watch") || "null"); if (c &&
 async function peek(name, code) {
   const r = await fetch(SUPA.url.replace(/\/$/, "") + "/rest/v1/rpc/game_peek", {
     method: "POST",
-    headers: { apikey: SUPA.key, Authorization: "Bearer " + SUPA.key, "Content-Type": "application/json" },
+    headers: Object.assign({ apikey: SUPA.key, "Content-Type": "application/json" }, /^eyJ/.test(SUPA.key) ? { Authorization: "Bearer " + SUPA.key } : {}),
     body: JSON.stringify({ p_name: name, p_code: code }),
   });
   const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (e) {}
