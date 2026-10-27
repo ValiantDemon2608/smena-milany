@@ -255,7 +255,7 @@ async function load() {
     if (cur && PLAYERS.some(p => p.id === cur.id)) openPlayer(cur.id);
     else { cur = null; renderList(); show("list"); }
   } catch (e) {
-    $("err").textContent = /wrong_code/.test(e.message) ? "Неверный код наблюдателя." : /game_list|function/.test(e.message) ? "В Supabase ещё не запущен новый SQL (supabase-v2.sql)." : "Нет связи с облаком. Попробуй позже.";
+    $("err").textContent = /wrong_code/.test(e.message) ? "Неверный код наблюдателя." : /game_list|function/.test(e.message) ? "В Supabase ещё не запущен новый SQL (supabase-v2.sql)." : "Нет связи с облаком. Попробуй позже. (" + e.message.slice(0, 120) + ")";
     $("fCode").value = CODE; show("auth");
   }
 }
