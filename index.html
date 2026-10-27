@@ -361,20 +361,6 @@ body.t-gold { --night: #26170c; --night-2: #563713; --glow: #a06e26; --rose: #ff
   </div>
 </section>
 
-<!-- Login -->
-<section class="screen" id="login" hidden>
-  <div class="wrap" style="justify-content:center;gap:16px">
-    <div class="hello"><h1>Вход в <span>облако</span></h1><p>Имя и PIN-код нужны, чтобы прогресс был на любом телефоне. Запомни их.</p></div>
-    <form id="loginForm" class="paper" style="gap:12px" novalidate>
-      <label class="fl">Имя<input id="lgName" autocomplete="username" autocapitalize="words" maxlength="30" placeholder="Милана"></label>
-      <label class="fl">PIN-код, 4–6 цифр<input id="lgPin" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" maxlength="6" placeholder="••••"></label>
-      <p class="lgErr" id="lgErr" role="alert"></p>
-      <button class="go" type="submit" id="lgGo">Войти</button>
-    </form>
-    <button class="chip" id="lgSkip" type="button" style="align-self:center">Играть без входа</button>
-  </div>
-</section>
-
 <!-- Awards -->
 <section class="screen" id="awards" hidden>
   <div class="wrap">
@@ -389,7 +375,6 @@ body.t-gold { --night: #26170c; --night-2: #563713; --glow: #a06e26; --rose: #ff
       <div class="sect"><h3>Оформление</h3><div class="picks" id="themes"></div></div>
       <div class="sect"><h3>Мелодия</h3><div class="picks" id="tunes"></div></div>
       <div class="sect"><h3>Значки <small id="bCount"></small></h3><div class="badges" id="badges"></div></div>
-      <div class="sect" id="acctSect"><h3>Облако</h3><p class="sync" style="text-align:left" id="acctText"></p><div class="picks" id="acctBtns"></div></div>
       <div class="sect"><h3>Резервная копия</h3>
         <p class="sync" style="text-align:left">Код сохраняет весь прогресс. Скопируй его в заметки: если сменишь телефон или очистишь Safari, вставь код сюда, и всё вернётся.</p>
         <div class="picks"><button class="pick" id="bkCopy" type="button">Скопировать код</button><button class="pick" id="bkLoad" type="button">Вставить код</button></div>
@@ -807,13 +792,15 @@ function summary() {
 }
 function save() { S.at = Date.now(); try { S.sum = summary(); } catch (e) {} try { localStorage.setItem("ms-state", JSON.stringify(S)); } catch (e) {} pushRemote(); }
 
-/* ================= Облако: вход по имени и PIN =================
-   Прогресс хранится в базе Supabase. Сайт вызывает только две функции
-   (game_login, game_save), обе проверяют PIN. Ключ ниже публичный. */
+/* ================= Облако: автосохранение без входа =================
+   У каждого телефона свой случайный ключ (ms-id). Игра сама отправляет прогресс
+   в базу Supabase через функцию game_sync. Ключ Supabase ниже публичный. */
 const SUPA = { url: "https://wipylxfzoowrekjerqpt.supabase.co", key: "sb_publishable_GqmXPOGDXG-aSD-z_GSUrQ_SvjQwxg_" };
 const CLOUD = /^https:/.test(SUPA.url) && SUPA.key.length > 20;
-const SYNC = { cred: null, busy: false, dirty: false, t: 0, state: "local" };
-try { SYNC.cred = JSON.parse(localStorage.getItem("ms-cred") || "null"); } catch (e) {}
+const SYNC = { id: "", busy: false, dirty: false, t: 0, state: "local" };
+const newId = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
+try { SYNC.id = localStorage.getItem("ms-id") || ""; if (!SYNC.id) { SYNC.id = newId(); localStorage.setItem("ms-id", SYNC.id); } } catch (e) { SYNC.id = newId(); }
+const DEVICE = /iPhone/.test(navigator.userAgent) ? "iPhone" : /iPad/.test(navigator.userAgent) ? "iPad" : /Android/.test(navigator.userAgent) ? "Android" : /Windows/.test(navigator.userAgent) ? "Windows" : /Mac/.test(navigator.userAgent) ? "Mac" : "Другое";
 function mergeState(a, b) {
   const base = (b.xp || 0) > (a.xp || 0) ? b : a, other = base === a ? b : a;
   const m = Object.assign(fresh(), base);
@@ -836,44 +823,27 @@ async function rpc(fn, body) {
   if (!r.ok) { const e = new Error((j && j.message) || txt); e.code = (j && j.message) || "http_" + r.status; throw e; }
   return j;
 }
-async function cloudLogin(name, pin) {
-  const remote = await rpc("game_login", { p_name: name, p_pin: pin });
-  SYNC.cred = { name, pin };
-  try { localStorage.setItem("ms-cred", JSON.stringify(SYNC.cred)); } catch (e) {}
-  if (remote && typeof remote.xp === "number") {
-    const m = mergeState(S, remote);
-    for (const k in S) delete S[k];
-    Object.assign(S, m);
-  }
-  SYNC.state = "cloud"; applyTheme(); save();
-}
-function cloudLogout() {
-  SYNC.cred = null; SYNC.state = "local";
-  try { localStorage.removeItem("ms-cred"); } catch (e) {}
-}
 function pushRemote() {
-  if (!CLOUD || !SYNC.cred) return;
+  if (!CLOUD) return;
   SYNC.dirty = true; clearTimeout(SYNC.t);
   SYNC.t = setTimeout(writeRemote, 1200);
 }
 async function writeRemote() {
-  if (!SYNC.cred || SYNC.busy || !SYNC.dirty) return;
+  if (SYNC.busy || !SYNC.dirty) return;
   SYNC.busy = true; SYNC.dirty = false;
-  try { await rpc("game_save", { p_name: SYNC.cred.name, p_pin: SYNC.cred.pin, p_state: S }); SYNC.state = "cloud"; }
-  catch (e) { SYNC.dirty = true; SYNC.state = /wrong_pin/.test(e.code) ? "badpin" : "offline"; }
+  try { await rpc("game_sync", { p_id: SYNC.id, p_device: DEVICE, p_state: S }); SYNC.state = "cloud"; }
+  catch (e) { SYNC.dirty = true; SYNC.state = "offline"; }
   SYNC.busy = false; paintSync();
-  if (SYNC.dirty && SYNC.state === "offline") SYNC.t = setTimeout(writeRemote, 15000);
+  if (SYNC.dirty) SYNC.t = setTimeout(writeRemote, 15000);
 }
 function paintSync() {
   const el = $("syncNote"); if (!el) return;
   el.textContent = !CLOUD ? "Прогресс сохраняется на этом телефоне."
-    : !SYNC.cred ? "Прогресс сохраняется только на этом телефоне. Войди в «Наградах», чтобы хранить его в облаке."
     : SYNC.state === "offline" ? "Нет связи с облаком. Прогресс сохранён на телефоне и отправится позже."
-    : SYNC.state === "badpin" ? "Облако не приняло PIN. Выйди и войди заново в «Наградах»."
-    : `Прогресс сохраняется в облаке, профиль «${SYNC.cred.name}».`;
+    : "Прогресс сохраняется в облаке автоматически.";
 }
-// При запуске тихо подтягиваем свежий прогресс из облака
-if (CLOUD && SYNC.cred) cloudLogin(SYNC.cred.name, SYNC.cred.pin).then(() => { if (!$("home").hidden) renderHome(); }).catch(e => { SYNC.state = /wrong_pin/.test(e.code) ? "badpin" : "offline"; paintSync(); });
+// Отмечаемся в облаке при запуске, чтобы Дима видел, что игра открыта
+if (CLOUD) setTimeout(pushRemote, 1500);
 window.addEventListener("online", () => { if (SYNC.dirty) writeRemote(); });
 
 /* ================= Опыт, уровни, значки ================= */
@@ -954,7 +924,7 @@ const rnd = a => a[Math.floor(Math.random() * a.length)];
 const factsCount = () => ITEMS.filter(x => S.seen[x.id]).length;
 const plural = (n, one, few, many) => { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many; };
 
-const SCREENS = ["title", "home", "quiz", "pulse", "facts", "boost", "awards", "login"];
+const SCREENS = ["title", "home", "quiz", "pulse", "facts", "boost", "awards"];
 function show(id) { SCREENS.forEach(s => $(s).hidden = s !== id); }
 let loop = null;
 function frame() { if (loop) loop(); requestAnimationFrame(frame); }
@@ -1347,15 +1317,6 @@ function openAwards() {
   };
   pickRow($("themes"), [{ v: "", n: "Вечер" }, { v: "t-dawn", k: "dawn", n: "Рассвет" }, { v: "t-mint", k: "mint", n: "Мята" }, { v: "t-gold", k: "gold", n: "Золото" }], S.theme, v => { S.theme = v; applyTheme(); });
   pickRow($("tunes"), [{ v: "evening", n: "Вечер" }, { v: "lullaby", k: "lullaby", n: "Колыбельная" }], S.tune, v => { S.tune = v; });
-  $("acctSect").hidden = !CLOUD;
-  if (CLOUD) {
-    $("acctText").textContent = SYNC.cred ? `Ты вошла как «${SYNC.cred.name}». Прогресс хранится в облаке.` : "Сейчас прогресс только на этом телефоне.";
-    const ab = $("acctBtns"); ab.innerHTML = "";
-    const btn = document.createElement("button"); btn.type = "button"; btn.className = "pick";
-    btn.textContent = SYNC.cred ? "Выйти" : "Войти";
-    btn.onclick = () => { buzz(); if (SYNC.cred) { cloudLogout(); openAwards(); } else show("login"); };
-    ab.appendChild(btn);
-  }
   const b = $("badges"); b.innerHTML = "";
   BADGES.forEach(x => {
     const el = document.createElement("div"); el.className = "bdg" + (S.badges[x.id] ? "" : " lock");
@@ -1385,23 +1346,6 @@ $("bkLoad").onclick = () => {
     save(); applyTheme(); $("bkText").value = ""; toast("Прогресс восстановлен!"); SFX.chime(); openAwards();
   } catch (e) { toast("Код не подошёл. Проверь, что скопирован целиком"); buzz(HAP.double); }
 };
-
-$("loginForm").addEventListener("submit", async e => {
-  e.preventDefault();
-  const name = $("lgName").value.trim(), pin = $("lgPin").value.trim();
-  if (name.length < 2) { $("lgErr").textContent = "Напиши имя, хотя бы две буквы."; return; }
-  if (!/^[0-9]{4,6}$/.test(pin)) { $("lgErr").textContent = "PIN-код — это 4–6 цифр."; return; }
-  $("lgErr").textContent = ""; $("lgGo").disabled = true; $("lgGo").textContent = "Входим…";
-  try {
-    await cloudLogin(name, pin);
-    buzz(HAP.gold); SFX.chime(); toast("Привет, " + name + "!"); $("lgPin").value = ""; toHome();
-  } catch (err) {
-    buzz(HAP.double);
-    $("lgErr").textContent = /wrong_pin/.test(err.code) ? "Неверный PIN для этого имени." : /bad_input/.test(err.code) ? "Проверь имя и PIN." : "Нет связи с облаком. Попробуй позже или играй без входа.";
-  }
-  $("lgGo").disabled = false; $("lgGo").textContent = "Войти";
-});
-$("lgSkip").onclick = () => { buzz(); toHome(); };
 
 /* ================= Карточка результата ================= */
 const overlayQueue = [];
@@ -1441,7 +1385,7 @@ $("vibSw").addEventListener("change", () => SFX.plink());
 $("startSw").addEventListener("change", () => {
   audioInit(); buzz(HAP.beat, true); SFX.chime();
   paintToggles();
-  if (CLOUD && !SYNC.cred) show("login"); else toHome();
+  toHome();
 });
 document.addEventListener("visibilitychange", () => {
   if (!A.ctx) return;

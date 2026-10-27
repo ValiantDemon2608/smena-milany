@@ -2,7 +2,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#241229">
 <meta name="robots" content="noindex">
-<title>Успехи Миланы</title>
+<title>Успехи игроков</title>
 <link rel="icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@600;700&family=Manrope:wght@500;700;800&display=swap">
@@ -71,21 +71,35 @@ button.ghost { background: none; border: 1px solid var(--line); color: var(--mut
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chips span { background: linear-gradient(135deg, rgba(255,125,156,.3), rgba(255,207,115,.25)); border-radius: 999px; padding: 6px 11px; font-size: .82rem; font-weight: 700; }
 .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.players { display: flex; flex-direction: column; gap: 8px; }
+.pl { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; color: var(--cream); font: 600 .95rem var(--f-body); }
+.pl .n { flex: none; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font: 700 1.15rem var(--f-display); background: var(--gold); color: var(--night); }
+.pl.zero .n { background: rgba(255,245,238,.12); color: var(--muted); }
+.pl div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pl b { font: 700 1rem var(--f-display); }
+.pl small { color: var(--muted); font-size: .8rem; }
+.pl .go { flex: none; color: var(--muted); font-size: 1.3rem; }
+button.danger { background: none; border: 1px solid rgba(255,125,156,.4); color: var(--rose); font-size: .85rem; padding: 9px 14px; }
 </style>
 </head><body>
 <main>
-  <h1>Успехи <span id="who">Миланы</span></h1>
+  <h1 id="head">Кто играл в <span>«Смену»</span></h1>
 
-  <form class="card" id="auth" novalidate>
-    <p class="muted">Только просмотр. Изменить её прогресс отсюда нельзя.</p>
-    <label>Имя игрока<input id="fName" value="Милана" autocomplete="off"></label>
+  <form class="card" id="auth" novalidate hidden>
+    <p class="muted">Только просмотр. Изменить прогресс отсюда нельзя.</p>
     <label>Код наблюдателя<input id="fCode" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
     <p class="err" id="err" role="alert"></p>
     <button type="submit">Показать</button>
   </form>
 
+  <section id="list" hidden style="display:flex;flex-direction:column;gap:12px">
+    <div class="row"><p class="muted" id="lsInfo"></p><button class="ghost" id="lsRefresh" type="button">Обновить</button></div>
+    <div class="players" id="players"></div>
+  </section>
+
   <section id="report" hidden style="display:flex;flex-direction:column;gap:14px">
-    <div class="row"><p class="muted" id="seen"></p><button class="ghost" id="refresh" type="button">Обновить</button></div>
+    <div class="row"><button class="ghost" id="back" type="button">← Все игроки</button><button class="ghost" id="refresh" type="button">Обновить</button></div>
+    <p class="muted" id="seen"></p>
     <div class="card lvl"><span class="n" id="lvN"></span><div><small id="lvS"></small><b id="lvT"></b><span class="meter"><i id="lvM"></i></span><span class="xp" id="lvX"></span></div></div>
     <div class="stats">
       <div class="stat"><b id="sShifts"></b><small>смен</small></div>
@@ -103,7 +117,7 @@ button.ghost { background: none; border: 1px solid var(--line); color: var(--mut
     </div>
     <div class="card">
       <h2>Купоны от тебя <small id="gN"></small></h2>
-      <p class="muted">«Ждёт» значит, что Милана открыла купон и ждёт, когда ты его исполнишь.</p>
+      <p class="muted">«Ждёт» значит, что купон открыт и ждёт, когда ты его исполнишь.</p>
       <div id="gifts" style="display:flex;flex-direction:column;gap:6px"></div>
     </div>
     <div class="card">
@@ -114,6 +128,7 @@ button.ghost { background: none; border: 1px solid var(--line); color: var(--mut
       <h2>Значки <small id="bN"></small></h2>
       <div class="chips" id="badges"></div>
     </div>
+    <div class="row"><p class="muted" id="delInfo">Лишняя запись, например твой тестовый телефон? Её можно удалить.</p><button class="danger" id="del" type="button">Удалить запись</button></div>
   </section>
 </main>
 <script>
@@ -123,37 +138,60 @@ const $ = id => document.getElementById(id);
 const plural = (n, a, b, c) => { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? a : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? b : c; };
 const dayKey = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
-function readHash() {
-  const h = new URLSearchParams(location.hash.slice(1));
-  if (h.get("code")) $("fCode").value = h.get("code");
-  if (h.get("name")) $("fName").value = h.get("name");
-}
-readHash();
-try { const c = JSON.parse(localStorage.getItem("ms-watch") || "null"); if (c && !$("fCode").value) { $("fCode").value = c.code; $("fName").value = c.name; } } catch (e) {}
+let CODE = new URLSearchParams(location.hash.slice(1)).get("code") || "";
+try { if (!CODE) CODE = localStorage.getItem("ms-watch-code") || ""; } catch (e) {}
 
-async function peek(name, code) {
-  const r = await fetch(SUPA.url.replace(/\/$/, "") + "/rest/v1/rpc/game_peek", {
+async function rpc(fn, body) {
+  const r = await fetch(SUPA.url.replace(/\/$/, "") + "/rest/v1/rpc/" + fn, {
     method: "POST",
     headers: Object.assign({ apikey: SUPA.key, "Content-Type": "application/json" }, /^eyJ/.test(SUPA.key) ? { Authorization: "Bearer " + SUPA.key } : {}),
-    body: JSON.stringify({ p_name: name, p_code: code }),
+    body: JSON.stringify(body),
   });
   const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (e) {}
   if (!r.ok) throw new Error((j && j.message) || "http_" + r.status);
   return j;
 }
 function ago(ts) {
-  if (!ts) return "ещё не играла";
+  if (!ts) return "ещё не играл(а)";
   const m = Math.round((Date.now() - ts) / 60000);
   if (m < 2) return "только что";
   if (m < 60) return `${m} ${plural(m, "минуту", "минуты", "минут")} назад`;
   const h = Math.round(m / 60); if (h < 24) return `${h} ${plural(h, "час", "часа", "часов")} назад`;
   const d = Math.round(h / 24); return `${d} ${plural(d, "день", "дня", "дней")} назад`;
 }
+const fmtDate = s => { const d = new Date(s); return isNaN(d) ? "" : `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, "0")}`; };
+const played = p => (p.state && (p.state.xp || p.state.shifts || Object.keys(p.state.seen || {}).length)) ? true : false;
 
-function render(res, name) {
-  const S = (res && res.state) || {}, sum = S.sum || {};
-  $("who").textContent = name.charAt(0).toUpperCase() + name.slice(1, -1) + (name.slice(-1) === "а" ? "ы" : name.slice(-1));
-  $("seen").textContent = "Последняя игра: " + ago(S.at);
+let PLAYERS = [], cur = null;
+function show(which) { ["auth", "list", "report"].forEach(k => $(k).hidden = k !== which); window.scrollTo(0, 0); }
+
+function renderList() {
+  $("head").innerHTML = 'Кто играл в <span>«Смену»</span>';
+  const box = $("players"); box.innerHTML = "";
+  const n = PLAYERS.length;
+  $("lsInfo").textContent = n ? `${n} ${plural(n, "телефон", "телефона", "телефонов")}, свежие сверху` : "";
+  if (!n) { box.innerHTML = '<p class="muted">Пока никто не открывал игру.</p>'; return; }
+  PLAYERS.forEach((p, i) => {
+    const S = p.state || {}, sum = S.sum || {}, on = played(p);
+    const el = document.createElement("button"); el.type = "button"; el.className = "pl" + (on ? "" : " zero");
+    el.innerHTML = `<span class="n"></span><div><b></b><small></small></div><span class="go" aria-hidden="true">›</span>`;
+    el.querySelector(".n").textContent = on ? (sum.level || 1) : "·";
+    el.querySelector("b").textContent = `${p.device || "Телефон"} · ${on ? (sum.title || "Абитуриентка") : "ещё не играл(а)"}`;
+    el.querySelector("small").textContent = (on ? `${S.xp || 0} опыта · ${S.shifts || 0} ${plural(S.shifts || 0, "смена", "смены", "смен")} · ` : "") + `последний раз ${ago(S.at || Date.parse(p.updated_at))} · с ${fmtDate(p.created_at)}`;
+    el.onclick = () => openPlayer(p.id);
+    box.appendChild(el);
+  });
+}
+
+function openPlayer(id) {
+  cur = PLAYERS.find(p => p.id === id); if (!cur) return renderList();
+  render(cur); armDel(false); show("report");
+}
+
+function render(p) {
+  const S = p.state || {}, sum = S.sum || {};
+  $("head").innerHTML = `Игрок: <span></span>`; $("head").querySelector("span").textContent = p.device || "Телефон";
+  $("seen").textContent = `Последняя игра: ${ago(S.at || Date.parse(p.updated_at))}. Впервые открыл(а) игру ${fmtDate(p.created_at)}.`;
   $("lvN").textContent = sum.level || 1;
   $("lvS").textContent = `Уровень ${sum.level || 1} из ${sum.maxLevel || 10}`;
   $("lvT").textContent = sum.title || "Абитуриентка";
@@ -191,6 +229,7 @@ function render(res, name) {
     el.querySelector("span").textContent = x.t;
     g.appendChild(el);
   });
+  if (!g.children.length) g.innerHTML = '<p class="muted">Купоны появятся со 2 уровня.</p>';
   const todo = (sum.gifts || []).filter(x => x.open && !x.used).length;
   $("gN").textContent = todo ? `${todo} ${plural(todo, "ждёт", "ждут", "ждут")} тебя` : "";
   // темы
@@ -200,31 +239,46 @@ function render(res, name) {
     el.innerHTML = `<span></span><span>${good} · ${seenN}/${all}</span><span class="bar"><i class="g" style="width:${good / all * 100}%"></i><i class="s" style="width:${(seenN - good) / all * 100}%"></i></span>`;
     el.firstChild.textContent = n; t.appendChild(el);
   });
-  if (!t.children.length) t.innerHTML = '<p class="muted">Появится после первой игры с входом в облако.</p>';
+  if (!t.children.length) t.innerHTML = '<p class="muted">Появится после первой игры.</p>';
   const b = $("badges"); b.innerHTML = "";
   (sum.badges || []).forEach(n => { const s = document.createElement("span"); s.textContent = n; b.appendChild(s); });
   if (!b.children.length) b.innerHTML = '<p class="muted">Пока нет значков.</p>';
-  $("bN").textContent = `${(sum.badges || []).length} из ${sum.badgesTotal || 28}`;
+  $("bN").textContent = `${(sum.badges || []).length} из ${sum.badgesTotal || 25}`;
 }
 
-let cur = null;
 async function load() {
-  const name = $("fName").value.trim(), code = $("fCode").value.trim();
+  if (!CODE) { show("auth"); return; }
   $("err").textContent = "";
   try {
-    const res = await peek(name, code);
-    if (!res) { $("err").textContent = "Игрок с таким именем ещё не входил в облако."; $("auth").hidden = false; $("report").hidden = true; return; }
-    try { localStorage.setItem("ms-watch", JSON.stringify({ name, code })); } catch (e) {}
-    cur = { name, code };
-    render(res, name.toLowerCase());
-    $("auth").hidden = true; $("report").hidden = false;
+    PLAYERS = await rpc("game_list", { p_code: CODE }) || [];
+    try { localStorage.setItem("ms-watch-code", CODE); } catch (e) {}
+    if (cur && PLAYERS.some(p => p.id === cur.id)) openPlayer(cur.id);
+    else { cur = null; renderList(); show("list"); }
   } catch (e) {
-    $("err").textContent = /wrong_code/.test(e.message) ? "Неверный код наблюдателя." : "Нет связи с облаком. Попробуй позже.";
-    $("auth").hidden = false; $("report").hidden = true;
+    $("err").textContent = /wrong_code/.test(e.message) ? "Неверный код наблюдателя." : /game_list|function/.test(e.message) ? "В Supabase ещё не запущен новый SQL (supabase-v2.sql)." : "Нет связи с облаком. Попробуй позже.";
+    $("fCode").value = CODE; show("auth");
   }
 }
-$("auth").addEventListener("submit", e => { e.preventDefault(); load(); });
+
+// Удаление в два нажатия, без системных окон
+let delTimer = 0;
+function armDel(on) {
+  clearTimeout(delTimer);
+  $("del").dataset.armed = on ? "1" : "";
+  $("del").textContent = on ? "Точно удалить? Нажми ещё раз" : "Удалить запись";
+  if (on) delTimer = setTimeout(() => armDel(false), 4000);
+}
+$("del").onclick = async () => {
+  if (!$("del").dataset.armed) return armDel(true);
+  armDel(false);
+  try { await rpc("game_forget", { p_code: CODE, p_id: cur.id }); cur = null; load(); }
+  catch (e) { $("delInfo").textContent = "Не получилось удалить, попробуй ещё раз."; }
+};
+
+$("auth").addEventListener("submit", e => { e.preventDefault(); CODE = $("fCode").value.trim(); load(); });
 $("refresh").onclick = load;
-if ($("fCode").value) load();
+$("lsRefresh").onclick = load;
+$("back").onclick = () => { cur = null; renderList(); show("list"); };
+load();
 </script>
 </body></html>
